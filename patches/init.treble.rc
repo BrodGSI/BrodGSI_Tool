@@ -1,0 +1,11 @@
+on post-fs-data
+    exec - root root -- /system/bin/rw-system.sh
+
+on property:sys.boot_completed=1
+    start treble-post-boot
+
+service treble-post-boot /system/bin/rw-system.sh --post-boot
+    user root
+    group root
+    oneshot
+    disabled

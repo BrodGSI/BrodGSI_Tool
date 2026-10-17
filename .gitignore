@@ -1,0 +1,15 @@
+# Временные папки сборки и готовые образы
+workspace/
+output/
+repos/
+*.img
+*.xz
+*.zip
+*.tgz
+*.bin
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
