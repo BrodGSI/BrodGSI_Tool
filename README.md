@@ -33,24 +33,33 @@ BrodGSI automatically clones, updates, and interprets patches from:
 
 ---
 
-## 🚀 Quick Start / Быстрый старт
+# 🚀 Quick Start / Быстрый старт
 
-### 1. Install Dependencies / Установка зависимостей
+## 1. Install Dependencies / Установка зависимостей
 ```bash
 git clone [https://github.com/BrodGSI/BrodGSI_Tool.git](https://github.com/BrodGSI/BrodGSI_tool.git)
 cd BrodGSI
-pip install -r requirements.txt```
+pip install -r requirements.txt
+```
 
-### 2. Install System Tools / Системные утилиты
+## 2. Install System Tools / Системные утилиты
 
-# Linux (Arch / Ubuntu / Debian):
-    ## Ubuntu / Debian
+## Linux (Arch / Ubuntu / Debian):
+### Ubuntu / Debian
     ```sudo apt install git p7zip-full android-sdk-libsparse-utils erofs-utils e2fsprogs```
-    ## Arch Linux
+### Arch Linux
     ```sudo pacman -S git p7zip android-tools erofs-utils e2fsprogs```
-    ## macOS:
+### macOS:
     ```brew install git sevenzip erofs-utils e2fsprogs```
-	## Windows:
+### Windows:
 	Place binaries (`7z.exe`, `lpunpack.exe`, `payload-dumper-go.exe`, `mke2fs.exe`, `e2fsdroid.exe`, `mkfs.erofs.exe`) into `bin/windows_amd64/`.
 	
-### 3. Run / Запуск
+# 3. Run / Запуск
+## Linux and MacOS:
+```
+python3 brodgsi.py
+```
+## Windows:
+```
+python brodgsi.py
+```
