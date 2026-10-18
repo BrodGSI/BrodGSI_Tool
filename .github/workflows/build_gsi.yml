@@ -1,0 +1,96 @@
+name: BrodGSI Cloud Builder & SourceForge Uploader
+
+on:
+  workflow_dispatch:
+    inputs:
+      rom_url:
+        description: 'Direct URL to Firmware (ZIP/TGZ/Payload)'
+        required: true
+        type: string
+      fs_type:
+        description: 'Output Filesystem Type'
+        required: true
+        default: 'ext4'
+        type: choice
+        options:
+          - ext4
+          - erofs
+          - both
+      enable_debloat:
+        description: 'Apply OEM Debloat Lists?'
+        required: true
+        default: true
+        type: boolean
+      sf_folder:
+        description: 'Target subfolder on SourceForge (e.g. Pixel3_Android9 or leave empty for root)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  build_and_upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      - name: Checkout BrodGSI Tool
+        uses: actions/checkout@v4
+
+      - name: Install Linux & Upload Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git python3-pip p7zip-full android-sdk-libsparse-utils \
+            erofs-utils e2fsprogs patch default-jre aria2 curl wget rsync sshpass
+
+      - name: Install apktool
+        run: |
+          sudo wget https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool -O /usr/local/bin/apktool
+          sudo wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar -O /usr/local/bin/apktool.jar
+          sudo chmod +x /usr/local/bin/apktool
+
+      - name: Install Python Packages
+        run: |
+          pip3 install rich questionary requests
+
+      - name: Ensure Binary Permissions
+        run: |
+          chmod -R +x bin/linux_amd64/* || true
+
+      - name: Run BrodGSI Builder (Headless Mode)
+        run: |
+          DEBLOAT_FLAG=""
+          if [ "${{ inputs.enable_debloat }}" = "true" ]; then
+            DEBLOAT_FLAG="--debloat"
+          fi
+          python3 brodgsi.py --ci --url "${{ inputs.rom_url }}" --fs "${{ inputs.fs_type }}" $DEBLOAT_FLAG
+
+      - name: Upload Built GSI to SourceForge
+        env:
+          SF_USER: ${{ secrets.SF_USERNAME }}
+          SF_PASS: ${{ secrets.SF_PASSWORD }}
+          SF_PROJECT: "brodgsi"
+          SF_SUBDIR: ${{ inputs.sf_folder }}
+        run: |
+          echo "🚀 Starting upload to SourceForge..."
+          
+          if [ -z "$SF_USER" ] || [ -z "$SF_PASS" ]; then
+            echo "❌ Error: SF_USERNAME or SF_PASSWORD secrets are not set in GitHub repository settings!"
+            exit 1
+          fi
+
+          # Формируем путь назначения на сервере SourceForge
+          TARGET_PATH="/home/frs/project/${SF_PROJECT}/"
+          if [ -n "$SF_SUBDIR" ]; then
+            TARGET_PATH="/home/frs/project/${SF_PROJECT}/${SF_SUBDIR}/"
+          fi
+
+          # Отправляем все собранные .7z/.img из папки output/ напрямую на SourceForge
+          sshpass -p "$SF_PASS" rsync -avP -e "ssh -o StrictHostKeyChecking=no" output/* "${SF_USER}@frs.sourceforge.net:${TARGET_PATH}"
+          
+          echo "✅ Successfully uploaded to https://sourceforge.net/projects/${SF_PROJECT}/files/${SF_SUBDIR}"

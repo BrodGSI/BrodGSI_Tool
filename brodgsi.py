@@ -1076,6 +1076,36 @@ class GSIPatcher:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
+    def _compress_to_7z(self, img_path: Path) -> Path:
+        seven_z = self.env.get_tool("7z")
+        if not seven_z:
+            console.log("[yellow]⚠ Утилита 7z не найдена. Пропускаем архивацию.[/yellow]")
+            return img_path
+
+        archive_path = img_path.with_suffix(".7z")
+        console.log(f"[cyan]📦 Упаковка {img_path.name} в архив (Ultra LZMA2)... Это займет пару минут.[/cyan]")
+        
+        # Настройки максимального сжатия: формат 7z, ультра сжатие (9), метод lzma2, словарь 64m
+        cmd = [seven_z, "a", "-t7z", "-mx=9", "-m0=lzma2", "-md=64m", "-ms=on", str(archive_path), str(img_path)]
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if res.returncode == 0 and archive_path.exists():
+            console.log(f"[green]✓ Сжатие завершено: {archive_path.name}[/green]")
+            try:
+                img_path.unlink()
+                console.log(f"[dim]🗑 Оригинальный файл {img_path.name} удален для экономии места.[/dim]")
+            except Exception as e:
+                console.log(f"[yellow]⚠ Архив создан, но удалить оригинал не удалось: {e}[/yellow]")
+            return archive_path
+        else:
+            console.log("[bold red]✗ Ошибка при сжатии. Оставляем оригинальный .img файл.[/bold red]")
+            if archive_path.exists():
+                try:
+                    archive_path.unlink()
+                except Exception:
+                    pass
+            return img_path
+
     def build_gsi(self, auto_select_mode: bool = True, fs_type: str = "ext4", enable_debloat: bool = True) -> list:
         console.rule(f"[bold cyan]{tr('stage2')}")
         
@@ -1127,7 +1157,10 @@ class GSIPatcher:
         output_images = []
         for fst in fs_types:
             out_img = self._repack_image(sys_root, final_rom_label, patch_engine.android_ver, fst, patch_engine.extra_file_contexts)
-            output_images.append(out_img)
+            
+            # Автоматическая упаковка в 7z и удаление оригинала
+            out_archive = self._compress_to_7z(out_img)
+            output_images.append(out_archive)
             
         return output_images
 
