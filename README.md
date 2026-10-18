@@ -83,5 +83,5 @@ python brodgsi.py
 ```
 
 ## 🔗 Official Links
-[📢 Telegram Channel (Releases & Updates)](t.me/BrodGSIUpdates)
-[📦 SourceForge Mirror (Download GSIs)](sourceforge.net/projects/brodgsi/files)
+[📢 Telegram Channel (Releases & Updates)](https://t.me/BrodGSIUpdates)
+[📦 SourceForge Mirror (Download GSIs)](https://sourceforge.net/projects/brodgsi/files)
