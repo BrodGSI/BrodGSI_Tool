@@ -63,7 +63,7 @@ sudo apt install git python3-pip p7zip-full android-sdk-libsparse-utils erofs-ut
 
 ## 🚀 Быстрый старт (На ПК)
 ```
-git clone [https://github.com/BrodGSI/BrodGSI_Tool.git](https://github.com/BrodGSI/BrodGSI_Tool.git)
+git clone https://github.com/BrodGSI/BrodGSI_Tool
 cd BrodGSI_Tool
 pip install -r requirements.txt
 python brodgsi.py
