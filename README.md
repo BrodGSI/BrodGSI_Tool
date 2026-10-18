@@ -1,65 +1,87 @@
-# 🛠 BrodGSI Tool
+# 🟢 BrodGSI Tool v3.0 (Matrix Edition)
 
-**BrodGSI Tool** is a cross-platform, rootless Automated Generic System Image (GSI) builder with a TUI interface. It combines the patch databases and porting methodologies from four major GSI projects into a single Python engine.
+[![Telegram](https://img.shields.io/badge/Telegram-BrodGSIUpdates-00FF41?style=for-the-badge&logo=telegram)](https://t.me/BrodGSIUpdates)
+[![SourceForge](https://img.shields.io/badge/SourceForge-Downloads-00FF41?style=for-the-badge&logo=sourceforge)](https://sourceforge.net/projects/brodgsi/files/)
 
-**BrodGSI Tool** — это кроссплатформенный инструмент для автоматической сборки бутабельных OEM GSI-образов с псевдографическим TUI-интерфейсом, объединяющий наработки четырёх крупнейших GSI-проектов.
+> 🌍 **Language / Язык:** [English](README.md) | [Русский](README_RU.md)
 
----
-
-## ✨ Features / Возможности
-
-* **🌍 Cross-Platform & Multi-Arch:** Runs natively on **Windows, Linux, and macOS** (`x86_64` / `amd64` and `arm64` / `aarch64`) without requiring `sudo mount` (rootless extraction & repacking).
-* **📦 Universal Container Extractor:** Automatically detects file signatures (Magic Bytes) regardless of file name. Supports:
-  * `.zip`, `.tgz`, `.tar.gz`, `.tar`, `.7z`, `.lz4`
-  * `payload.bin`, `super.img` (raw & sparse), `system.new.dat.br`, `system.new.dat`
-  * Huawei `UPDATE.APP`, Samsung `AP.tar.md5` (`.img.lz4`), Xiaomi `fastboot_images.tgz`
-  * Filesystems: **EXT4**, **EROFS**, **F2FS**
-* **🔍 Smart Auto-Detection & Patch Scoring:**
-  * Automatically detects the Android Version, SDK level, and OEM ROM skin (`HyperOS`, `MIUI`, `OneUI`, `ColorOS`, `OxygenOS`, `RealmeUI`, `MagicOS`, `OriginOS`, `Flyme`, `Pixel`, etc.) by scanning `build.prop` and partition trees.
-  * **Auto-Select Mode:** Calculates a modification score (files + script lines + smali patches) across all repositories and automatically picks the most comprehensive patch set.
-  * **Manual Mode:** Lets you choose between available patch variants if multiple exist.
-  * **Generic Fallback:** Automatically falls back to universal PHH-Treble Generic patches if no OEM-specific patch exists.
-* **🌐 Bilingual TUI:** Full support for **Russian (RU)** and **English (EN)**.
+**BrodGSI Tool** is an automated, cross-platform kitchen for building bootable Project Treble Generic System Images (GSI) from stock OEM firmwares (Xiaomi, Samsung OneUI, Pixel, OnePlus, Vivo, Realme, etc.). It unites patch engines and scripts from **MysticGSI**, **yaebuebugsitool**, **ErfanGSIs**, and **OriginGSITool** under a single Matrix-styled CLI and supports headless cloud building via GitHub Actions with direct upload to SourceForge.
 
 ---
 
-## 🤝 Integrated Patch Databases / Интегрированные проекты
+## ⚡ Key Features
 
-BrodGSI automatically clones, updates, and interprets patches from:
-1. [MysticGSI/mysticgsi](https://github.com/MysticGSI/mysticgsi)
-2. [radgoodnow/yaebuebugsitool](https://github.com/radgoodnow/yaebuebugsitool)
-3. [erfanoabdi/ErfanGSIs](https://github.com/erfanoabdi/ErfanGSIs)
-4. [defnotegor/OriginGSITool](https://github.com/defnotegor/OriginGSITool)
+* **Matrix CLI Theme:** Complete hacker-green terminal design powered by `rich` and `questionary`.
+* **Smart Hardware & ROM Heuristic Analyzer:** Automatically reads `build.prop` from `system`, `vendor`, and `product` to detect OEM skin, Android SDK, chipset (`ro.board.platform`), and device codename (`ro.product.device`) to calculate the highest-scoring patch set.
+* **Samsung OneUI KnoxPatch Engine:** Automatically decompiles `services.jar`, patches `SystemServer.smali` around `StartKnoxGuard` (removes `move-result` above it and replaces conditional `if-*` with unconditional `goto`), and recompiles on the fly.
+* **Recursive Container Unpacker:** Supports `.zip`, `.tgz`, `payload.bin`, `super.img`, `.new.dat.br`, `UPDATE.APP`, `AP.tar.md5`, `EROFS`, `EXT4`, and `F2FS`.
+* **Sparse Git Sync:** Uses `git sparse-checkout` to fetch only essential patch folders in seconds without downloading gigabytes of bloat.
+* **Auto-Compression:** Compresses final images into Ultra LZMA2 `.7z` archives and deletes raw `.img` files to save disk space.
 
 ---
 
-# 🚀 Quick Start / Быстрый старт
+## ☁️ How to Build GSI in the Cloud (GitHub Actions + SourceForge)
 
-## 1. Install Dependencies / Установка зависимостей
+You can build GSIs directly on GitHub's servers and automatically upload them to SourceForge without using your PC's bandwidth or disk space:
+
+1. **Fork or Push** this repository to your GitHub account.
+2. **Configure SourceForge Secrets:**
+   * Go to your repository on GitHub ➔ **Settings** ➔ **Secrets and variables** ➔ **Actions**.
+   * Click **New repository secret** and add two secrets:
+     * `SF_USERNAME` — Your SourceForge account username.
+     * `SF_PASSWORD` — Your SourceForge account password.
+3. **Run the Workflow:**
+   * Open the **Actions** tab in your GitHub repository.
+   * Select **BrodGSI Cloud Builder & SourceForge Uploader** on the left.
+   * Click **Run workflow** on the right and fill in the parameters:
+     * **Direct URL to Firmware:** Paste a direct link to any stock ROM (`.zip` / `.tgz`).
+     * **Output Filesystem Type:** Choose `ext4`, `erofs`, or `both`.
+     * **Apply OEM Debloat Lists:** Leave checked (`true`) to remove bloatware.
+     * **Target subfolder on SourceForge:** Specify the destination folder name (e.g., `GooglePixel3_Android9`).
+   * Click the green **Run workflow** button. Once finished, the compressed `.7z` GSI will appear directly in your SourceForge files!
+
+---
+
+## 🛠 Requirements & Binaries (Local Build)
+
+The project uses a cross-platform `bin/` directory structure.
+
+### For Windows (amd64) Users:
+Ready to work **out-of-the-box**. All required `.exe` binaries (`7z`, `mke2fs`, `simg2img`, `lpunpack`, `payload-dumper-go`, etc.) are pre-included in `bin/windows_amd64/`.
+* **Note:** You must install **Java (JRE/JDK 11+)** on your system to use Smali patching (`apktool` for Samsung KnoxPatch).
+
+### For Linux & macOS Users:
+Only `windows_amd64` binaries are fully bundled in the repo (**except `payload-dumper-go`**, which is pre-placed in all platform folders). You must install the remaining tools via your package manager:
+
+**Debian / Ubuntu / Mint:**
 ```bash
-git clone https://github.com/BrodGSI/BrodGSI_tool.git
-cd BrodGSI
-pip install -r requirements.txt
+sudo apt update
+sudo apt install git python3-pip p7zip-full android-sdk-libsparse-utils erofs-utils e2fsprogs patch default-jre apktool
 ```
 
-## 2. Install System Tools / Системные утилиты
+**Arch Linux / Manjaro:**
+```sudo pacman -S git python-pip p7zip android-tools erofs-utils e2fsprogs patch jre-openjdk android-apktool```
 
-## Linux (Arch / Ubuntu / Debian):
-### Ubuntu / Debian
-    sudo apt install git p7zip-full android-sdk-libsparse-utils erofs-utils e2fsprogs
-### Arch Linux
-    sudo pacman -S git p7zip android-tools erofs-utils e2fsprogs
-### macOS:
-    brew install git sevenzip erofs-utils e2fsprogs
-### Windows:
-	Just run the tool, everything you need is already built in (only for x86, on arm64 the tool has not been tested yet).
-	
-# 3. Run / Запуск
-## Linux and MacOS:
+## 🚀 Quick Start (Local)
+```
+git clone [https://github.com/BrodGSI/BrodGSI_Tool.git](https://github.com/BrodGSI/BrodGSI_Tool.git)
+cd BrodGSI_Tool
+pip install -r requirements.txt
+python brodgsi.py
+```
+
+## 💻 Running the tool
+
+# Linux and MacOS:
 ```
 python3 brodgsi.py
 ```
-## Windows:
+
+# Windows:
 ```
 python brodgsi.py
 ```
+
+## 🔗 Official Links
+[📢 Telegram Channel (Releases & Updates)](t.me/BrodGSIUpdates)
+[📦 SourceForge Mirror (Download GSIs)](sourceforge.net/projects/brodgsi/files)
