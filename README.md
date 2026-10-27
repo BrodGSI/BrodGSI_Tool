@@ -48,7 +48,7 @@ The project uses a cross-platform `bin/` directory structure.
 
 ### For Windows (amd64) Users:
 Ready to work **out-of-the-box**. All required `.exe` binaries (`7z`, `mke2fs`, `simg2img`, `lpunpack`, `payload-dumper-go`, etc.) are pre-included in `bin/windows_amd64/`.
-* **Note:** You must install **Java (JRE/JDK 11+)** on your system to use Smali patching (`apktool` for Samsung KnoxPatch).
+* **Note:** You must install **[Git](https://git-scm.com/install/)** on your system to download GSI patches
 
 ### For Linux & macOS Users:
 Only `windows_amd64` binaries are fully bundled in the repo (**except `payload-dumper-go`**, which is pre-placed in all platform folders). You must install the remaining tools via your package manager:
@@ -60,11 +60,13 @@ sudo apt install git python3-pip p7zip-full android-sdk-libsparse-utils erofs-ut
 ```
 
 **Arch Linux / Manjaro:**
-```sudo pacman -S git python-pip p7zip android-tools erofs-utils e2fsprogs patch jre-openjdk android-apktool```
+```bash
+sudo pacman -S git python-pip p7zip android-tools erofs-utils e2fsprogs patch jre-openjdk android-apktool
+```
 
 ## 🚀 Quick Start (Local)
 ```
-git clone [https://github.com/BrodGSI/BrodGSI_Tool.git](https://github.com/BrodGSI/BrodGSI_Tool.git)
+git clone https://github.com/BrodGSI/BrodGSI_Tool
 cd BrodGSI_Tool
 pip install -r requirements.txt
 python brodgsi.py
@@ -83,5 +85,5 @@ python brodgsi.py
 ```
 
 ## 🔗 Official Links
-[📢 Telegram Channel (Releases & Updates)](t.me/BrodGSIUpdates)
-[📦 SourceForge Mirror (Download GSIs)](sourceforge.net/projects/brodgsi/files)
+[📢 Telegram Channel (Releases & Updates)](https://t.me/BrodGSIUpdates)
+[📦 SourceForge Mirror (Download GSIs)](https://sourceforge.net/projects/brodgsi/files)
