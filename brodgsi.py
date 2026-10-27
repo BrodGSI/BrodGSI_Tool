@@ -500,14 +500,20 @@ class FirmwareExtractor:
         else:
             self._unpack_archive(source_path, self.extract_dir)
 
-        for _ in range(5):
+        # Рекурсивный проход: пока появляются новые промежуточные файлы (до 8 итераций)
+        for iteration in range(8):
             changed = False
-            for f in list(self.extract_dir.rglob("*")):
-                if f.is_file() and self._process_intermediate(f):
+            # Ищем все файлы во всех вложенных папках extract_dir
+            current_files = [f for f in list(self.extract_dir.rglob("*")) if f.is_file()]
+            for f in current_files:
+                if not f.exists():
+                    continue
+                if self._process_intermediate(f):
                     changed = True
             if not changed:
                 break
 
+        # Проверяем, появились ли разделы в img_dir
         for part in TARGET_PARTITIONS:
             candidate = self.img_dir / f"{part}.img"
             if candidate.exists() and candidate.stat().st_size > 0:
@@ -521,56 +527,141 @@ class FirmwareExtractor:
         name_l = archive.name.lower()
         seven_z = self.env.get_tool("7z")
 
-        if name_l.endswith(".zip"):
-            console.log(f"[bright_green]{archive.name} -> ZIP[/bright_green]")
-            if seven_z:
-                subprocess.run([seven_z, "x", "-y", f"-o{out_dir}", str(archive)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                with zipfile.ZipFile(archive, "r") as zf:
-                    zf.extractall(out_dir)
-            return True
+        if not seven_z:
+            console.log(f"[bold red]✗ 7z не найден в системе! Нечем распаковать {archive.name}[/bold red]")
+            return False
 
-        if any(name_l.endswith(ext) for ext in (".tgz", ".tar.gz", ".tar", ".tar.md5")):
-            console.log(f"[bright_green]{archive.name} -> TAR/TGZ[/bright_green]")
-            if seven_z:
-                subprocess.run([seven_z, "x", "-y", f"-o{out_dir}", str(archive)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                with tarfile.open(archive, "r:*") as tf:
-                    tf.extractall(out_dir)
-            return True
-
-        if name_l.endswith((".7z", ".rar", ".xz", ".gz", ".lz4")):
-            if seven_z:
-                console.log(f"[bright_green]{archive.name} -> 7Z Extract[/bright_green]")
-                subprocess.run([seven_z, "x", "-y", f"-o{out_dir}", str(archive)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return True
+        # Все архивы (zip, tar, md5, tar.md5, 7z) распаковываем строго через 7z
+        if any(name_l.endswith(ext) for ext in (".zip", ".tar", ".tgz", ".tar.gz", ".md5", ".7z")):
+            console.log(f"[bright_green]{archive.name} -> Распаковка через 7z...[/bright_green]")
+            res = subprocess.run(
+                [seven_z, "x", "-y", f"-o{out_dir}", str(archive)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return res.returncode == 0
         return False
 
     def _process_intermediate(self, file_path: Path) -> bool:
         name = file_path.name
         name_l = name.lower()
 
-        if name_l.endswith((".zip", ".tar", ".tgz", ".tar.gz", ".tar.md5", ".7z")):
-            sub_out = file_path.parent / f"unpacked_{file_path.stem}"
-            sub_out.mkdir(parents=True, exist_ok=True)
-            if self._unpack_archive(file_path, sub_out):
+        # 1. Мусор Samsung: сразу удаляем BL, CP, CSC и FOTA, чтобы не тратить место и время
+        if name_l.startswith(("bl_", "cp_", "csc_", "home_csc_")) or "fota" in name_l:
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+            return True
+
+        # 2. Распаковка LZ4 (super.img.lz4, system.img.lz4 и т.д.)
+        if name_l.endswith(".lz4"):
+            out_target = file_path.with_suffix("")
+            console.log(f"[bold bright_green]{name} -> Распаковка Samsung LZ4...[/bold bright_green]")
+
+            success = False
+            
+            # Способ 1: Нативный Python lz4.frame (установлен в окружение)
+            try:
+                import lz4.frame
+                with open(file_path, "rb") as f_in, open(out_target, "wb") as f_out:
+                    dctx = lz4.frame.LZ4FrameDecompressor()
+                    while True:
+                        # Читаем чанками по 16 МБ
+                        buf = f_in.read(16 * 1024 * 1024)
+                        if not buf:
+                            break
+                        try:
+                            decompressed = dctx.decompress(buf)
+                            if decompressed:
+                                f_out.write(decompressed)
+                        except Exception:
+                            # Если Самсунг закрыл фрейм посередине потока — создаем новый контекст и продолжаем
+                            dctx = lz4.frame.LZ4FrameDecompressor()
+                            continue
+
+                if out_target.exists() and out_target.stat().st_size > 1024 * 1024 * 500:
+                    success = True
+            except Exception as e:
+                console.log(f"[yellow]Сбой Python LZ4: {e}[/yellow]")
+
+            # Способ 2: lz4 бинарник с флагом --no-crc (если модуль дал сбой)
+            if not success:
+                lz4_bin = self.env.get_tool("lz4")
+                if lz4_bin:
+                    if out_target.exists():
+                        try:
+                            out_target.unlink()
+                        except Exception:
+                            pass
+                    subprocess.run([lz4_bin, "-d", "-f", "-q", str(file_path), str(out_target)], check=False)
+                    if out_target.exists() and out_target.stat().st_size > 1024 * 1024 * 500:
+                        success = True
+
+            if success:
+                console.log(f"[bold bright_green]✓ {name} успешно развернут ({out_target.stat().st_size / (1024*1024):.1f} МБ)[/bold bright_green]")
                 try:
                     file_path.unlink()
                 except Exception:
                     pass
                 return True
+            else:
+                console.log(f"[bold red]✗ Не удалось распаковать {name} целиком![/bold red]")
+                if out_target.exists():
+                    try:
+                        out_target.unlink()
+                    except Exception:
+                        pass
+                return False
 
-        if name_l == "payload.bin":
-            dumper = self.env.get_tool("payload-dumper-go")
-            if dumper:
-                console.log("[bright_green]payload.bin -> payload-dumper-go[/bright_green]")
-                subprocess.run([dumper, "-o", str(self.img_dir), str(file_path)], check=False)
-                try:
-                    file_path.unlink()
-                except Exception:
-                    pass
-                return True
+        # 3. Вложенные архивы (AP_*.tar.md5 и подобные)
+        if any(name_l.endswith(ext) for ext in (".tar", ".tgz", ".tar.gz", ".md5", ".7z")) or (name_l.endswith(".zip") and file_path.parent != self.work_dir / "00_download"):
+            # Если это AP-файл Самсунга или другой вложенный архив
+            console.log(f"[bold bright_green]Распаковка системного контейнера: {name}...[/bold bright_green]")
+            seven_z = self.env.get_tool("7z")
+            res = subprocess.run(
+                [seven_z, "x", "-y", f"-o{self.extract_dir}", str(file_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+            return res.returncode == 0
 
+        # 4. Super Image -> Sparse чек -> lpunpack
+        if file_path.stem.lower() == "super" and name_l.endswith(".img"):
+            target_raw = file_path
+            if self._is_sparse_image(file_path):
+                simg2img = self.env.get_tool("simg2img")
+                if simg2img:
+                    console.log("[bold bright_green]super.img является Sparse -> конвертация simg2img...[/bold bright_green]")
+                    raw_super = file_path.with_name("super.raw.img")
+                    res = subprocess.run([simg2img, str(file_path), str(raw_super)], check=False)
+                    if res.returncode == 0 and raw_super.exists():
+                        try:
+                            file_path.unlink()
+                        except Exception:
+                            pass
+                        raw_super.rename(file_path)
+                        target_raw = file_path
+
+            lpunpack = self.env.get_tool("lpunpack")
+            if lpunpack:
+                console.log("[bold bright_green]super.img -> запуск lpunpack...[/bold bright_green]")
+                res = subprocess.run([lpunpack, str(target_raw), str(self.extract_dir)], check=False)
+                if res.returncode == 0:
+                    try:
+                        target_raw.unlink()
+                    except Exception:
+                        pass
+                    return True
+                else:
+                    console.log("[bold red]✗ Ошибка lpunpack![/bold red]")
+                    return False
+
+        # 5. Brotli (.new.dat.br)
         if name_l.endswith(".new.dat.br"):
             brotli = self.env.get_tool("brotli")
             out_dat = file_path.with_suffix("")
@@ -583,6 +674,7 @@ class FirmwareExtractor:
                     pass
                 return True
 
+        # 6. .new.dat + .transfer.list -> raw img
         if name_l.endswith(".new.dat"):
             part_prefix = name[:-8]
             transfer_list = file_path.parent / f"{part_prefix}.transfer.list"
@@ -597,6 +689,7 @@ class FirmwareExtractor:
                     pass
                 return True
 
+        # 7. Финализация разделов (.img) в папку 02_images
         if name_l.endswith(".img"):
             part_stem = file_path.stem.lower()
             for suffix in ("_a", "_b"):
@@ -615,17 +708,6 @@ class FirmwareExtractor:
                             pass
                         raw_img.rename(file_path)
                         return True
-
-            if part_stem == "super":
-                lpunpack = self.env.get_tool("lpunpack")
-                if lpunpack:
-                    console.log("[bright_green]super.img -> lpunpack[/bright_green]")
-                    subprocess.run([lpunpack, str(file_path), str(self.extract_dir)], check=False)
-                    try:
-                        file_path.unlink()
-                    except Exception:
-                        pass
-                    return True
 
             if part_stem in TARGET_PARTITIONS:
                 target_img = self.img_dir / f"{part_stem}.img"
