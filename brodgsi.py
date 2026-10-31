@@ -546,28 +546,37 @@ class FirmwareExtractor:
         name = file_path.name
         name_l = name.lower()
 
-        # 1. Мусор Samsung: сразу удаляем BL, CP, CSC и FOTA, чтобы не тратить место и время
-        if name_l.startswith(("bl_", "cp_", "csc_", "home_csc_")) or "fota" in name_l:
+        # 1. Мусор Samsung: удаляем модемы, ядро и юзердату
+        IGNORE_PREFIXES = (
+            "bl_", "cp_", "csc_", "home_csc_", "fota",
+            "boot", "init_boot", "vendor_boot", "dtbo", "recovery",
+            "userdata", "persist", "misc", "vm-bootsys", "vbmeta"
+        )
+        if any(name_l.startswith(p) for p in IGNORE_PREFIXES):
             try:
                 file_path.unlink()
             except Exception:
                 pass
             return True
 
-        # 2. Распаковка LZ4 (super.img.lz4, system.img.lz4 и т.д.)
+        # 2. Распаковка LZ4 — распаковываем ТОЛЬКО то, что нужно для GSI (super / system)
         if name_l.endswith(".lz4"):
+            if not any(k in name_l for k in ("super", "system", "product", "vendor", "odm")):
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass
+                return True
+
             out_target = file_path.with_suffix("")
             console.log(f"[bold bright_green]{name} -> Распаковка Samsung LZ4...[/bold bright_green]")
-
             success = False
-            
-            # Способ 1: Нативный Python lz4.frame (установлен в окружение)
+
             try:
                 import lz4.frame
                 with open(file_path, "rb") as f_in, open(out_target, "wb") as f_out:
                     dctx = lz4.frame.LZ4FrameDecompressor()
                     while True:
-                        # Читаем чанками по 16 МБ
                         buf = f_in.read(16 * 1024 * 1024)
                         if not buf:
                             break
@@ -576,27 +585,12 @@ class FirmwareExtractor:
                             if decompressed:
                                 f_out.write(decompressed)
                         except Exception:
-                            # Если Самсунг закрыл фрейм посередине потока — создаем новый контекст и продолжаем
                             dctx = lz4.frame.LZ4FrameDecompressor()
                             continue
-
-                if out_target.exists() and out_target.stat().st_size > 1024 * 1024 * 500:
+                if out_target.exists() and out_target.stat().st_size > 0:
                     success = True
             except Exception as e:
                 console.log(f"[yellow]Сбой Python LZ4: {e}[/yellow]")
-
-            # Способ 2: lz4 бинарник с флагом --no-crc (если модуль дал сбой)
-            if not success:
-                lz4_bin = self.env.get_tool("lz4")
-                if lz4_bin:
-                    if out_target.exists():
-                        try:
-                            out_target.unlink()
-                        except Exception:
-                            pass
-                    subprocess.run([lz4_bin, "-d", "-f", "-q", str(file_path), str(out_target)], check=False)
-                    if out_target.exists() and out_target.stat().st_size > 1024 * 1024 * 500:
-                        success = True
 
             if success:
                 console.log(f"[bold bright_green]✓ {name} успешно развернут ({out_target.stat().st_size / (1024*1024):.1f} МБ)[/bold bright_green]")
@@ -605,14 +599,7 @@ class FirmwareExtractor:
                 except Exception:
                     pass
                 return True
-            else:
-                console.log(f"[bold red]✗ Не удалось распаковать {name} целиком![/bold red]")
-                if out_target.exists():
-                    try:
-                        out_target.unlink()
-                    except Exception:
-                        pass
-                return False
+            return False
 
         # 3. Вложенные архивы (AP_*.tar.md5 и подобные)
         if any(name_l.endswith(ext) for ext in (".tar", ".tgz", ".tar.gz", ".md5", ".7z")) or (name_l.endswith(".zip") and file_path.parent != self.work_dir / "00_download"):
